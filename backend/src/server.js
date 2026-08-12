@@ -5,7 +5,6 @@ import dotenv from "dotenv";
 
 import { testDatabaseConnection } from "./config/db.js";
 
-import { authenticate, authorize } from "./middleware/authMiddleware.js";
 import authRoutes from "./routes/authRoutes.js";
 import assetRoutes from "./routes/assetRoutes.js";
 import transferRoutes from "./routes/transferRoutes.js";
@@ -17,24 +16,13 @@ import expenditureRoutes from "./routes/expenditureRoutes.js";
 import auditRoutes from "./routes/auditRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 
-// Load environment variables from .env
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-/* Basic middleware */
-
-// Allow the server to receive JSON request bodies
-app.use(express.json({ limit: "10mb" }));
-
-// Support form-urlencoded request bodies
-app.use(express.urlencoded({ extended: true }));
-
-// Add some basic security-related HTTP headers
 app.use(helmet());
 
-// Allow requests from the frontend application
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
@@ -42,17 +30,18 @@ app.use(
   }),
 );
 
-/* Public API routes */
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Simple API check
+// API status
 app.get("/api", (req, res) => {
-  res.status(200).json({
+  res.json({
     success: true,
     message: "Military Asset Management API",
   });
 });
 
-// Health check for the backend and database
+// Health check
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
@@ -62,47 +51,19 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// API routes
 app.use("/api/auth", authRoutes);
-
 app.use("/api/assets", assetRoutes);
-
 app.use("/api/transfers", transferRoutes);
-
 app.use("/api/bases", baseRoutes);
-
 app.use("/api/equipment-types", equipmentRoutes);
-
 app.use("/api/purchases", purchaseRoutes);
-
 app.use("/api/assignments", assignmentRoutes);
-
 app.use("/api/expenditures", expenditureRoutes);
-
 app.use("/api/audit-logs", auditRoutes);
-
 app.use("/api/reports", reportRoutes);
 
-/* Protected test route */
-app.get("/api/protected", authenticate, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "You accessed a protected route",
-    user: req.user,
-  });
-});
-
-/* Admin-only test route */
-
-app.get("/api/admin/test", authenticate, authorize("ADMIN"), (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Admin access granted",
-    user: req.user,
-  });
-});
-
-/* 404 handler */
-
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -110,8 +71,7 @@ app.use((req, res) => {
   });
 });
 
-/*Start the server */
-
+// Start server
 const startServer = async () => {
   try {
     await testDatabaseConnection();
@@ -120,7 +80,7 @@ const startServer = async () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    console.error("Server failed to start:", error);
     process.exit(1);
   }
 };
