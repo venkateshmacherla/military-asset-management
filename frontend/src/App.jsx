@@ -1,17 +1,26 @@
-function App() {
-  return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-slate-900">
-          Military Asset Management
-        </h1>
+import { Navigate, Route, Routes } from "react-router-dom";
 
-        <p className="mt-3 text-slate-600">
-          Frontend initialized successfully.
-        </p>
-      </div>
-    </div>
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Purchases from "./pages/Purchases";
+import Transfers from "./pages/Transfers";
+
+const App = () => {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      <Route path="/dashboard" element={<Dashboard />} />
+
+      <Route path="/" element={<Navigate to="/login" replace />} />
+
+      <Route path="*" element={<Navigate to="/login" replace />} />
+
+      <Route path="/purchases" element={<Purchases />} />
+
+      <Route path="/transfers" element={<Transfers />} />
+    </Routes>
   );
-}
+};
 
 export default App;
