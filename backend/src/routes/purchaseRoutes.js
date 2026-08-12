@@ -1,26 +1,26 @@
 import express from "express";
 
 import {
-  getPurchases,
-  getPurchaseById,
   createPurchase,
+  getPurchases,
 } from "../controllers/purchaseController.js";
 
-import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { authenticateToken } from "../middlewares/authMiddleware.js";
+import { authorizeRoles } from "../middlewares/rbacMiddleware.js";
 
 const router = express.Router();
 
-// Get all purchase records
-router.get("/", authenticate, getPurchases);
+router.get(
+  "/",
+  authenticateToken,
+  authorizeRoles("ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"),
+  getPurchases,
+);
 
-// View one purchase record
-router.get("/:id", authenticate, getPurchaseById);
-
-// Create a new purchase
 router.post(
   "/",
-  authenticate,
-  authorize("ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"),
+  authenticateToken,
+  authorizeRoles("ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"),
   createPurchase,
 );
 

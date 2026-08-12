@@ -1,251 +1,112 @@
 import pool from "../config/db.js";
 
-// Get all purchase records
-export const getPurchases = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT
-        p.id,
-
-        p.base_id,
-        b.name AS base_name,
-        b.location AS base_location,
-
-        p.equipment_type_id,
-        et.name AS equipment_name,
-        et.category,
-
-        p.quantity,
-
-        p.created_by,
-        u.username AS created_by_username,
-
-        p.created_at
-
-      FROM purchases p
-
-      INNER JOIN bases b
-        ON p.base_id = b.id
-
-      INNER JOIN equipment_types et
-        ON p.equipment_type_id = et.id
-
-      LEFT JOIN users u
-        ON p.created_by = u.id
-
-      ORDER BY p.created_at DESC
-    `);
-
-    res.status(200).json({
-      success: true,
-      count: result.rows.length,
-      data: result.rows,
-    });
-  } catch (error) {
-    console.error("Get purchases error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch purchases",
-    });
-  }
-};
-
-// Get a single purchase record by ID
-export const getPurchaseById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(
-      `
-      SELECT
-        p.id,
-
-        p.base_id,
-        b.name AS base_name,
-        b.location AS base_location,
-
-        p.equipment_type_id,
-        et.name AS equipment_name,
-        et.category,
-
-        p.quantity,
-
-        p.created_by,
-        u.username AS created_by_username,
-
-        p.created_at
-
-      FROM purchases p
-
-      INNER JOIN bases b
-        ON p.base_id = b.id
-
-      INNER JOIN equipment_types et
-        ON p.equipment_type_id = et.id
-
-      LEFT JOIN users u
-        ON p.created_by = u.id
-
-      WHERE p.id = $1
-      `,
-      [id],
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Purchase not found",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: result.rows[0],
-    });
-  } catch (error) {
-    console.error("Get purchase error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch purchase",
-    });
-  }
-};
-
-// Create a new purchase record and update inventory accordingly
 export const createPurchase = async (req, res) => {
-  const client = await pool.connect();
-
   try {
-    const { baseId, equipmentTypeId, quantity } = req.body || {};
+    const { baseId, equipmentTypeId, quantity, purchaseDate } = req.body;
 
-    if (!baseId || !equipmentTypeId || quantity === undefined) {
+    if (!baseId || !equipmentTypeId || !quantity) {
       return res.status(400).json({
         success: false,
-        message: "baseId, equipmentTypeId and quantity are required",
+        message: "Base, equipment type and quantity are required",
       });
     }
 
     if (Number(quantity) <= 0) {
       return res.status(400).json({
         success: false,
-        message: "Quantity must be greater than zero",
+        message: "Quantity must be greater than 0",
       });
     }
 
-    await client.query("BEGIN");
-
-    // Make sure the base exists.
-    const baseResult = await client.query(
-      `
-      SELECT id
-      FROM bases
-      WHERE id = $1
-      `,
-      [baseId],
-    );
-
-    if (baseResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Base not found",
-      });
-    }
-
-    // Make sure the equipment type exists.
-    const equipmentResult = await client.query(
-      `
-      SELECT id
-      FROM equipment_types
-      WHERE id = $1
-      `,
-      [equipmentTypeId],
-    );
-
-    if (equipmentResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-
-      return res.status(404).json({
-        success: false,
-        message: "Equipment type not found",
-      });
-    }
-
-    // Add the purchased quantity to inventory.
-    const assetResult = await client.query(
-      `
-      INSERT INTO assets (
-        base_id,
-        equipment_type_id,
-        quantity
-      )
-      VALUES ($1, $2, $3)
-
-      ON CONFLICT (base_id, equipment_type_id)
-      DO UPDATE SET
-        quantity = assets.quantity + EXCLUDED.quantity,
-        updated_at = CURRENT_TIMESTAMP
-
-      RETURNING *
-      `,
-      [baseId, equipmentTypeId, quantity],
-    );
-
-    // Record the purchase.
-    const purchaseResult = await client.query(
+    const result = await pool.query(
       `
       INSERT INTO purchases (
         base_id,
         equipment_type_id,
         quantity,
-        created_by
+        created_at
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, COALESCE($4::timestamp, CURRENT_TIMESTAMP))
       RETURNING *
       `,
-      [baseId, equipmentTypeId, quantity, req.user.id],
+      [baseId, equipmentTypeId, Number(quantity), purchaseDate || null],
     );
 
-    // Record the action for auditing.
-    await client.query(
-      `
-      INSERT INTO audit_logs (
-        user_id,
-        action,
-        details
-      )
-      VALUES ($1, $2, $3)
-      `,
-      [
-        req.user.id,
-        "PURCHASE_CREATED",
-        `Purchased ${quantity} units of equipment ${equipmentTypeId} for base ${baseId}`,
-      ],
-    );
+    const purchase = result.rows[0];
 
-    await client.query("COMMIT");
+    if (req.user?.id) {
+      await pool.query(
+        `
+        INSERT INTO audit_logs (
+          user_id,
+          action,
+          details
+        )
+        VALUES ($1, 'PURCHASE', $2)
+        `,
+        [
+          req.user.id,
+          `Purchased ${quantity} items of equipment type ${equipmentTypeId} for base ${baseId}`,
+        ],
+      );
+    }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: "Purchase created successfully",
-      data: {
-        purchase: purchaseResult.rows[0],
-        inventory: assetResult.rows[0],
-      },
+      message: "Purchase recorded successfully",
+      data: purchase,
     });
   } catch (error) {
-    await client.query("ROLLBACK");
-
     console.error("Create purchase error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to create purchase",
+      error: error.message,
     });
-  } finally {
-    client.release();
+  }
+};
+
+export const getPurchases = async (req, res) => {
+  try {
+    const { baseId, equipmentTypeId } = req.query;
+
+    const result = await pool.query(
+      `
+      SELECT
+        p.id,
+        p.base_id,
+        b.name AS base_name,
+        p.equipment_type_id,
+        e.name AS equipment_name,
+        e.category,
+        p.quantity,
+        p.created_at
+      FROM purchases p
+      JOIN bases b
+        ON b.id = p.base_id
+      JOIN equipment_types e
+        ON e.id = p.equipment_type_id
+      WHERE
+        ($1::int IS NULL OR p.base_id = $1)
+        AND
+        ($2::int IS NULL OR p.equipment_type_id = $2)
+      ORDER BY p.created_at DESC
+      `,
+      [baseId || null, equipmentTypeId || null],
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error("Get purchases error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch purchases",
+      error: error.message,
+    });
   }
 };

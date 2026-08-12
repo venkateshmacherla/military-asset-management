@@ -3,24 +3,24 @@ import express from "express";
 import {
   createTransfer,
   getTransfers,
-  getTransferById,
 } from "../controllers/transferController.js";
 
-import { authenticate, authorize } from "../middleware/authMiddleware.js";
+import { authenticateToken } from "../middlewares/authMiddleware.js";
+import { authorizeRoles } from "../middlewares/rbacMiddleware.js";
 
 const router = express.Router();
 
-// Get all transfers
-router.get("/", authenticate, getTransfers);
+router.get(
+  "/",
+  authMiddleware,
+  authorizeRoles("ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"),
+  getTransfers,
+);
 
-// Get one transfer
-router.get("/:id", authenticate, getTransferById);
-
-// Create transfer
 router.post(
   "/",
-  authenticate,
-  authorize("ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"),
+  authMiddleware,
+  authorizeRoles("ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"),
   createTransfer,
 );
 
