@@ -1,8 +1,6 @@
 import pool from "../config/db.js";
 
-/*
-  Create a new transfer
- */
+// Create a new transfer
 export const createTransfer = async (req, res) => {
   const client = await pool.connect();
 
@@ -10,7 +8,6 @@ export const createTransfer = async (req, res) => {
     const { fromBaseId, toBaseId, equipmentTypeId, quantity, remarks } =
       req.body || {};
 
-    // Basic request validation
     if (
       !fromBaseId ||
       !toBaseId ||
@@ -40,7 +37,7 @@ export const createTransfer = async (req, res) => {
 
     await client.query("BEGIN");
 
-    // Check the source inventory
+    // Check source inventory
     const sourceResult = await client.query(
       `
       SELECT id, quantity
@@ -63,7 +60,7 @@ export const createTransfer = async (req, res) => {
 
     const sourceAsset = sourceResult.rows[0];
 
-    // Make sure the source base has enough inventory
+    // Check available quantity
     if (Number(sourceAsset.quantity) < Number(quantity)) {
       await client.query("ROLLBACK");
 
@@ -73,7 +70,7 @@ export const createTransfer = async (req, res) => {
       });
     }
 
-    // Make sure both bases exist
+    // Check both bases
     const baseResult = await client.query(
       `
       SELECT id
@@ -92,7 +89,7 @@ export const createTransfer = async (req, res) => {
       });
     }
 
-    // Reduce inventory at the source
+    // Remove quantity from source
     await client.query(
       `
       UPDATE assets
@@ -104,9 +101,7 @@ export const createTransfer = async (req, res) => {
       [quantity, sourceAsset.id],
     );
 
-    // Add inventory to destination.
-    // If the destination does not have this equipment yet,
-    // create the inventory record.
+    // Add quantity to destination
     const destinationResult = await client.query(
       `
       INSERT INTO assets (
@@ -124,12 +119,12 @@ export const createTransfer = async (req, res) => {
       [toBaseId, equipmentTypeId, quantity],
     );
 
-    // Store the transfer history
+    // Save transfer history
     const transferResult = await client.query(
       `
       INSERT INTO transfers (
-        from_base_id,
-        to_base_id,
+        source_base_id,
+        destination_base_id,
         equipment_type_id,
         quantity,
         remarks,
@@ -148,7 +143,7 @@ export const createTransfer = async (req, res) => {
       ],
     );
 
-    // Keep an audit trail
+    // Save audit log
     await client.query(
       `
       INSERT INTO audit_logs (
@@ -167,7 +162,7 @@ export const createTransfer = async (req, res) => {
 
     await client.query("COMMIT");
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Inventory transferred successfully",
       data: {
@@ -180,30 +175,27 @@ export const createTransfer = async (req, res) => {
 
     console.error("Create transfer error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to create transfer",
-      error: error.message,
     });
   } finally {
     client.release();
   }
 };
 
-/*
- * Get all transfers
- */
+// Get all transfers
 export const getTransfers = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
         t.id,
 
-        t.from_base_id,
-        fb.name AS from_base_name,
+        t.source_base_id,
+        sb.name AS source_base_name,
 
-        t.to_base_id,
-        tb.name AS to_base_name,
+        t.destination_base_id,
+        db.name AS destination_base_name,
 
         t.equipment_type_id,
         et.name AS equipment_name,
@@ -211,6 +203,7 @@ export const getTransfers = async (req, res) => {
 
         t.quantity,
         t.remarks,
+
         t.created_by,
         u.username AS created_by_username,
 
@@ -218,11 +211,11 @@ export const getTransfers = async (req, res) => {
 
       FROM transfers t
 
-      INNER JOIN bases fb
-        ON t.from_base_id = fb.id
+      INNER JOIN bases sb
+        ON t.source_base_id = sb.id
 
-      INNER JOIN bases tb
-        ON t.to_base_id = tb.id
+      INNER JOIN bases db
+        ON t.destination_base_id = db.id
 
       INNER JOIN equipment_types et
         ON t.equipment_type_id = et.id
@@ -233,7 +226,7 @@ export const getTransfers = async (req, res) => {
       ORDER BY t.created_at DESC
     `);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: result.rows.length,
       data: result.rows,
@@ -241,16 +234,14 @@ export const getTransfers = async (req, res) => {
   } catch (error) {
     console.error("Get transfers error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch transfers",
     });
   }
 };
 
-/*
- * Get a single transfer by ID
- */
+// Get one transfer
 export const getTransferById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -260,11 +251,11 @@ export const getTransferById = async (req, res) => {
       SELECT
         t.id,
 
-        t.from_base_id,
-        fb.name AS from_base_name,
+        t.source_base_id,
+        sb.name AS source_base_name,
 
-        t.to_base_id,
-        tb.name AS to_base_name,
+        t.destination_base_id,
+        db.name AS destination_base_name,
 
         t.equipment_type_id,
         et.name AS equipment_name,
@@ -272,6 +263,7 @@ export const getTransferById = async (req, res) => {
 
         t.quantity,
         t.remarks,
+
         t.created_by,
         u.username AS created_by_username,
 
@@ -279,11 +271,11 @@ export const getTransferById = async (req, res) => {
 
       FROM transfers t
 
-      INNER JOIN bases fb
-        ON t.from_base_id = fb.id
+      INNER JOIN bases sb
+        ON t.source_base_id = sb.id
 
-      INNER JOIN bases tb
-        ON t.to_base_id = tb.id
+      INNER JOIN bases db
+        ON t.destination_base_id = db.id
 
       INNER JOIN equipment_types et
         ON t.equipment_type_id = et.id
@@ -303,14 +295,14 @@ export const getTransferById = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: result.rows[0],
     });
   } catch (error) {
     console.error("Get transfer error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch transfer",
     });

@@ -10,21 +10,13 @@ import { authenticate, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-/*
- * View transfer history
- */
+// Get all transfers
 router.get("/", authenticate, getTransfers);
 
-/*
- * View a single transfer
- */
+// Get one transfer
 router.get("/:id", authenticate, getTransferById);
 
-/*
-Create a new transfer
-Admin, Base Commander and Logistics Officer
-are allowed to move inventory.
- */
+// Create transfer
 router.post(
   "/",
   authenticate,

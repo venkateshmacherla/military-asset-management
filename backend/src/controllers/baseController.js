@@ -1,10 +1,6 @@
 import pool from "../config/db.js";
 
-/*
- Get all bases
- This is mainly used by the dashboard and forms where
- the user needs to select a base.
- */
+// Get all bases
 export const getBases = async (req, res) => {
   try {
     const result = await pool.query(`
