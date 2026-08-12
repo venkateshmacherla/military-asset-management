@@ -14,6 +14,8 @@ import equipmentRoutes from "./routes/equipmentRoutes.js";
 import purchaseRoutes from "./routes/purchaseRoutes.js";
 import assignmentRoutes from "./routes/assignmentRoutes.js";
 import expenditureRoutes from "./routes/expenditureRoutes.js";
+import auditRoutes from "./routes/auditRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
 
 // Load environment variables from .env
 dotenv.config();
@@ -75,6 +77,10 @@ app.use("/api/purchases", purchaseRoutes);
 app.use("/api/assignments", assignmentRoutes);
 
 app.use("/api/expenditures", expenditureRoutes);
+
+app.use("/api/audit-logs", auditRoutes);
+
+app.use("/api/reports", reportRoutes);
 
 /* Protected test route */
 app.get("/api/protected", authenticate, (req, res) => {
